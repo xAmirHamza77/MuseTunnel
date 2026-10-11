@@ -1,0 +1,101 @@
+{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-direct",
+        "type": "local",
+        "detour": "direct"
+      },
+      {
+        "tag": "dns-remote",
+        "type": "tcp",
+        "server": "1.1.1.1",
+        "detour": "socks-out"
+      }
+    ],
+    "rules": [
+      {
+        "process_name": [
+          "Muse",
+          "EndoCrashpadHandler",
+          "Autoupdate",
+          "Updater"
+        ],
+        "server": "dns-remote"
+      },
+      {
+        "process_path_regex": [
+          ".*Muse\\.app/.*"
+        ],
+        "server": "dns-remote"
+      }
+    ],
+    "final": "dns-direct"
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "interface_name": "utun88",
+      "address": [
+        "172.19.0.1/30"
+      ],
+      "auto_route": true,
+      "strict_route": false,
+      "stack": "gvisor"
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "socks",
+      "tag": "socks-out",
+      "server": "YOUR_PROXY_HOST",
+      "server_port": 1080,
+      "username": "YOUR_PROXY_USERNAME",
+      "password": "YOUR_PROXY_PASSWORD"
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "default_domain_resolver": "dns-direct",
+    "auto_detect_interface": true,
+    "find_process": true,
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "process_name": [
+          "Muse",
+          "EndoCrashpadHandler",
+          "Autoupdate",
+          "Updater"
+        ],
+        "outbound": "socks-out"
+      },
+      {
+        "process_path_regex": [
+          ".*Muse\\.app/.*"
+        ],
+        "outbound": "socks-out"
+      }
+    ],
+    "final": "direct"
+  },
+  "experimental": {
+    "clash_api": {
+      "external_controller": "127.0.0.1:9990"
+    }
+  }
+}

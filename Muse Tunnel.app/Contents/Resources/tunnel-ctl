@@ -1,0 +1,144 @@
+#!/bin/bash
+# Muse Tunnel Controller
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PIDFILE="/tmp/muse_tunnel.pid"
+LOGFILE="/tmp/muse_tunnel.log"
+
+if [ -f "$SCRIPT_DIR/sing-box" ]; then
+    SINGBOX="$SCRIPT_DIR/sing-box"
+elif [ -x "/opt/homebrew/bin/sing-box" ]; then
+    SINGBOX="/opt/homebrew/bin/sing-box"
+elif [ -x "/usr/local/bin/sing-box" ]; then
+    SINGBOX="/usr/local/bin/sing-box"
+else
+    echo "sing-box binary not found" >&2
+    exit 1
+fi
+
+# Prioritize user-specific config in ~/.config/muse-tunnel/config.json
+if [ -f "$HOME/.config/muse-tunnel/config.json" ]; then
+    CONFIG="$HOME/.config/muse-tunnel/config.json"
+elif [ -f "$SCRIPT_DIR/config.json" ]; then
+    CONFIG="$SCRIPT_DIR/config.json"
+elif [ -f "/Applications/Muse Tunnel.app/Contents/Resources/config.json" ]; then
+    CONFIG="/Applications/Muse Tunnel.app/Contents/Resources/config.json"
+else
+    echo "config.json not found" >&2
+    exit 1
+fi
+
+is_running() {
+    if [ -f "$PIDFILE" ]; then
+        PID=$(cat "$PIDFILE")
+        if kill -0 "$PID" 2>/dev/null; then
+            return 0
+        fi
+    fi
+    if pgrep -f "sing-box.*musetunnel|sing-box.*Muse Tunnel" >/dev/null 2>&1; then
+        return 0
+    fi
+    return 1
+}
+
+case "$1" in
+    start)
+        if is_running; then
+            echo "ALREADY_RUNNING"
+            exit 0
+        fi
+        
+        # Start sing-box in background
+        "$SINGBOX" run -c "$CONFIG" > "$LOGFILE" 2>&1 &
+        TUNNEL_PID=$!
+        echo "$TUNNEL_PID" > "$PIDFILE"
+        
+        # Wait up to 4 seconds to verify clash-api is active
+        for i in {1..8}; do
+            if curl -s -m 1 http://127.0.0.1:9990/version >/dev/null 2>&1; then
+                echo "STARTED"
+                exit 0
+            fi
+            sleep 0.5
+        done
+        
+        if kill -0 "$TUNNEL_PID" 2>/dev/null; then
+            echo "STARTED"
+            exit 0
+        else
+            echo "FAILED_TO_START" >&2
+            cat "$LOGFILE" >&2
+            exit 1
+        fi
+        ;;
+
+    stop)
+        if [ -f "$PIDFILE" ]; then
+            PID=$(cat "$PIDFILE")
+            kill -TERM "$PID" 2>/dev/null || true
+            rm -f "$PIDFILE"
+        fi
+        pkill -f "sing-box.*config.json" 2>/dev/null || true
+        # Wait a moment for interface cleanup
+        sleep 0.5
+        echo "STOPPED"
+        ;;
+
+    status)
+        if is_running && curl -s -m 1 http://127.0.0.1:9990/version >/dev/null 2>&1; then
+            echo "ACTIVE"
+        elif is_running; then
+            echo "STARTING"
+        else
+            echo "INACTIVE"
+        fi
+        ;;
+
+    relaunch-muse)
+        if pgrep -x "Muse" >/dev/null 2>&1; then
+            pkill -x "Muse" 2>/dev/null || true
+            sleep 1
+        fi
+        open -a "/Applications/Muse.app"
+        echo "RELAUNCHED"
+        ;;
+
+    test-proxy)
+        # Dynamically extract proxy details from CONFIG
+        PROXY_INFO=$(python3 -c "
+import json, sys
+try:
+    with open('$CONFIG') as f:
+        data = json.load(f)
+    for ob in data.get('outbounds', []):
+        if ob.get('type') == 'socks':
+            srv = ob.get('server', '')
+            port = ob.get('server_port', 1080)
+            user = ob.get('username', '')
+            pw = ob.get('password', '')
+            auth = f'{user}:{pw}@' if user or pw else ''
+            print(f'socks5h://{auth}{srv}:{port}')
+            sys.exit(0)
+    print('')
+except Exception as e:
+    print('')
+")
+        if [ -z "$PROXY_INFO" ] || [[ "$PROXY_INFO" == *"YOUR_PROXY_HOST"* ]]; then
+            echo "ERROR: Please configure your proxy server in settings."
+            exit 1
+        fi
+
+        RESULT=$(curl --connect-timeout 4 -m 6 -s -x "$PROXY_INFO" https://api.ipify.org 2>/dev/null || true)
+        if [ -n "$RESULT" ]; then
+            echo "OK: $RESULT"
+        else
+            echo "ERROR: Unable to connect"
+        fi
+        ;;
+
+    *)
+        echo "Usage: $0 {start|stop|status|relaunch-muse|test-proxy}"
+        exit 1
+        ;;
+esac
