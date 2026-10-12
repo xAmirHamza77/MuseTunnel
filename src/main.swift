@@ -570,6 +570,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let controller = TunnelController()
     
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.accessory)
+        
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 420),
             styleMask: [.titled, .closable, .miniaturizable],
@@ -604,6 +606,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc func openDashboard() {
         window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
     }
     
