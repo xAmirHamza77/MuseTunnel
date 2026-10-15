@@ -104,6 +104,50 @@ case "$1" in
         echo "RELAUNCHED"
         ;;
 
+    clear-data)
+        pkill -9 -x "Muse" 2>/dev/null || true
+        pkill -9 -x "EndoCrashpadHandler" 2>/dev/null || true
+        sleep 0.5
+        defaults delete com.meta.endo 2>/dev/null || true
+        defaults delete com.meta.endo.green 2>/dev/null || true
+        killall cfprefsd 2>/dev/null || true
+        rm -rf "$HOME/Library/Application Support/com.meta.endo"*
+        rm -rf "$HOME/Library/Application Support/com.meta.prototypes.endo"*
+        rm -rf "$HOME/Library/Caches/com.meta.endo"*
+        rm -rf "$HOME/Library/Caches/endo-mosaic-cache"*
+        rm -rf "$HOME/Library/WebKit/com.meta.endo"*
+        rm -rf "$HOME/Library/HTTPStorages/com.meta.endo"*
+        rm -rf "$HOME/Library/Saved Application State/com.meta.endo"*
+        rm -rf "$HOME/Library/Preferences/com.meta.endo"*
+        security delete-generic-password -s "com.meta.endo" 2>/dev/null || true
+        security delete-generic-password -l "com.meta.endo" 2>/dev/null || true
+        security delete-generic-password -s "V9WTTPBFK9.com.meta.endo" 2>/dev/null || true
+        echo "CLEARED"
+        ;;
+
+    clear-data-relaunch)
+        pkill -9 -x "Muse" 2>/dev/null || true
+        pkill -9 -x "EndoCrashpadHandler" 2>/dev/null || true
+        sleep 0.5
+        defaults delete com.meta.endo 2>/dev/null || true
+        defaults delete com.meta.endo.green 2>/dev/null || true
+        killall cfprefsd 2>/dev/null || true
+        rm -rf "$HOME/Library/Application Support/com.meta.endo"*
+        rm -rf "$HOME/Library/Application Support/com.meta.prototypes.endo"*
+        rm -rf "$HOME/Library/Caches/com.meta.endo"*
+        rm -rf "$HOME/Library/Caches/endo-mosaic-cache"*
+        rm -rf "$HOME/Library/WebKit/com.meta.endo"*
+        rm -rf "$HOME/Library/HTTPStorages/com.meta.endo"*
+        rm -rf "$HOME/Library/Saved Application State/com.meta.endo"*
+        rm -rf "$HOME/Library/Preferences/com.meta.endo"*
+        security delete-generic-password -s "com.meta.endo" 2>/dev/null || true
+        security delete-generic-password -l "com.meta.endo" 2>/dev/null || true
+        security delete-generic-password -s "V9WTTPBFK9.com.meta.endo" 2>/dev/null || true
+        sleep 1
+        open -a "/Applications/Muse.app"
+        echo "CLEARED_AND_RELAUNCHED"
+        ;;
+
     test-proxy)
         # Dynamically extract proxy details from CONFIG
         PROXY_INFO=$(python3 -c "

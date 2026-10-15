@@ -13,6 +13,7 @@ class TunnelController: ObservableObject {
     @Published var recentConnections: [String] = []
     @Published var logOutput: String = ""
     @Published var isTestingProxy: Bool = false
+    @Published var isClearingData: Bool = false
     
     // Proxy Configuration Fields
     @Published var proxyServer: String = ""
@@ -258,6 +259,24 @@ class TunnelController: ObservableObject {
         }
     }
     
+    func clearDataAndRelaunch() {
+        isClearingData = true
+        proxyStatusMessage = "Clearing Muse app data..."
+        let script = scriptPath
+        DispatchQueue.global(qos: .userInitiated).async {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: script)
+            proc.arguments = ["clear-data-relaunch"]
+            try? proc.run()
+            proc.waitUntilExit()
+            DispatchQueue.main.async {
+                self.isClearingData = false
+                self.proxyStatusMessage = "Muse app data cleared & relaunched"
+                self.checkStatus()
+            }
+        }
+    }
+    
     func testProxy() {
         saveConfig()
         isTestingProxy = true
@@ -356,6 +375,7 @@ struct SettingsSheetView: View {
 // MARK: - SwiftUI User Interface
 struct MainDashboardView: View {
     @ObservedObject var controller: TunnelController
+    @State private var showingClearConfirm: Bool = false
     
     var body: some View {
         VStack(spacing: 18) {
@@ -462,56 +482,72 @@ struct MainDashboardView: View {
             .padding(.horizontal, 20)
             
             // Action Buttons
-            HStack(spacing: 12) {
-                if !controller.isTunnelActive {
+            VStack(spacing: 8) {
+                HStack(spacing: 12) {
+                    if !controller.isTunnelActive {
+                        Button(action: {
+                            controller.startTunnel()
+                        }) {
+                            HStack {
+                                Image(systemName: "play.fill")
+                                Text("Start Tunnel & Route Muse")
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 34)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.blue)
+                        .disabled(controller.proxyServer.isEmpty)
+                    } else {
+                        Button(action: {
+                            controller.stopTunnel()
+                        }) {
+                            HStack {
+                                Image(systemName: "stop.fill")
+                                Text("Stop Tunnel")
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 34)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.red)
+                    }
+                    
                     Button(action: {
-                        controller.startTunnel()
+                        controller.testProxy()
                     }) {
                         HStack {
-                            Image(systemName: "play.fill")
-                            Text("Start Tunnel & Route Muse")
+                            Image(systemName: "network")
+                            Text(controller.latencyText.contains("ms") ? controller.latencyText : "Test Ping")
                         }
-                        .frame(maxWidth: .infinity, minHeight: 34)
+                        .frame(minHeight: 34)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.blue)
-                    .disabled(controller.proxyServer.isEmpty)
-                } else {
+                    .buttonStyle(.bordered)
+                    .disabled(controller.isTestingProxy || controller.proxyServer.isEmpty)
+                }
+                
+                HStack(spacing: 12) {
                     Button(action: {
-                        controller.stopTunnel()
+                        controller.relaunchMuse()
                     }) {
                         HStack {
-                            Image(systemName: "stop.fill")
-                            Text("Stop Tunnel")
+                            Image(systemName: "arrow.clockwise")
+                            Text("Relaunch Muse")
                         }
-                        .frame(maxWidth: .infinity, minHeight: 34)
+                        .frame(maxWidth: .infinity, minHeight: 32)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
-                }
-                
-                Button(action: {
-                    controller.relaunchMuse()
-                }) {
-                    HStack {
-                        Image(systemName: "arrow.clockwise")
-                        Text("Relaunch Muse")
+                    .buttonStyle(.bordered)
+                    
+                    Button(action: {
+                        showingClearConfirm = true
+                    }) {
+                        HStack {
+                            Image(systemName: "trash.circle")
+                            Text(controller.isClearingData ? "Clearing..." : "Clear Data & Relaunch")
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 32)
                     }
-                    .frame(minHeight: 34)
+                    .buttonStyle(.bordered)
+                    .disabled(controller.isClearingData)
                 }
-                .buttonStyle(.bordered)
-                
-                Button(action: {
-                    controller.testProxy()
-                }) {
-                    HStack {
-                        Image(systemName: "network")
-                        Text(controller.latencyText.contains("ms") ? controller.latencyText : "Test Ping")
-                    }
-                    .frame(minHeight: 34)
-                }
-                .buttonStyle(.bordered)
-                .disabled(controller.isTestingProxy || controller.proxyServer.isEmpty)
             }
             .padding(.horizontal, 20)
             
@@ -556,9 +592,17 @@ struct MainDashboardView: View {
             .padding(.horizontal, 20)
             .padding(.bottom, 16)
         }
-        .frame(width: 520, height: 420)
+        .frame(width: 520, height: 450)
         .sheet(isPresented: $controller.showSettings) {
             SettingsSheetView(controller: controller)
+        }
+        .alert("Clear Muse App Data?", isPresented: $showingClearConfirm) {
+            Button("Cancel", role: .cancel) { }
+            Button("Clear & Relaunch", role: .destructive) {
+                controller.clearDataAndRelaunch()
+            }
+        } message: {
+            Text("This will completely wipe all data, cache, login sessions, and preferences for the Muse app only (com.meta.endo) and relaunch it fresh. Muse Tunnel settings will not be affected.")
         }
     }
 }
@@ -573,7 +617,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 420),
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 450),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -599,9 +643,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Proxy Settings...", action: #selector(openSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Relaunch Muse", action: #selector(relaunchMuse), keyEquivalent: "r"))
+        menu.addItem(NSMenuItem(title: "Clear Data & Relaunch Muse", action: #selector(clearDataAndRelaunch), keyEquivalent: "c"))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q"))
         statusItem.menu = menu
+    }
+    
+    @objc func clearDataAndRelaunch() {
+        controller.clearDataAndRelaunch()
     }
     
     @objc func openDashboard() {

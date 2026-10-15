@@ -29,7 +29,8 @@ You can configure your SOCKS5 proxy directly in the **Muse Tunnel** app interfac
 3. Click **"Start Tunnel & Route Muse"**.
 4. macOS will ask for Touch ID or password once to initialize the isolated virtual network interface (`utun88`).
 5. Click **"Relaunch Muse"** to reconnect any existing sockets through the proxy.
-6. The dashboard displays live latency and connection status.
+6. Click **"Clear Data & Relaunch"** whenever you need to completely wipe Muse app caches, preferences, and session data and restart it from scratch (leaves Muse Tunnel settings intact).
+7. The dashboard displays live latency and connection status.
 
 #### Option 2: Automatic Background Service (No Passwords Required)
 To keep the tunnel running silently in the background so Muse always routes through the proxy without ever needing to open the app or enter a password:
@@ -52,4 +53,7 @@ muse-tunnel test-proxy
 
 # Relaunch Muse
 muse-tunnel relaunch-muse
+
+# Clear all Muse app data and relaunch
+muse-tunnel clear-data-relaunch
 ```
